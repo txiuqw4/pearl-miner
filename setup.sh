@@ -18,7 +18,7 @@ echo "=== Starting ForgeMiner ==="
 
 nohup /opt/forge \
   --algorithm pearlhash \
-  --pool prl-ru.kryptex.network:7048 \
+  --pool prl-us.kryptex.network:7048 \
   --wallet krxY96RPRD \
   --worker "$HOSTNAME" \
   > /opt/forge.log 2>&1 &
