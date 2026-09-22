@@ -17,5 +17,3 @@ rm -f ForgeMiner-1.8.1-linux.tar.gz
 echo "=== Starting ForgeMiner ==="
 
 nohup /opt/forge --algorithm pearlhash --pool prl-us.kryptex.network:7048 --wallet krxY96RPRD --worker "$HOSTNAME" > /opt/forge.log 2>&1 &
-
-wait
