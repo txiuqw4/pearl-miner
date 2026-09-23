@@ -14,4 +14,4 @@ chmod +x SRBMiner-MULTI
 
 rm -f SRBMiner-Multi-3-6-9-Linux.tar.gz
 
-exec /opt/SRBMiner-MULTI --disable-cpu --algorithm pearlhash -pool prl-us.kryptex.network:7048 --wallet krxY96RPRD --worker "$WORKER" --gpu-coffset0 200 --gpu-cclock0 2490 --gpu-mclock0 7001 --gpu-plimit0 575
+exec /opt/SRBMiner-Multi-3-6-9/SRBMiner-MULTI --disable-cpu --algorithm pearlhash -pool prl-us.kryptex.network:7048 --wallet krxY96RPRD --worker "$WORKER" --gpu-coffset0 200 --gpu-cclock0 2490 --gpu-mclock0 7001 --gpu-plimit0 575
