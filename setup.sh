@@ -10,4 +10,9 @@ tar -xzf ForgeMiner-1.8.1-linux.tar.gz
 chmod +x forge
 rm -f ForgeMiner-1.8.1-linux.tar.gz
 
-exec /opt/forge --algorithm pearlhash --pool prl-us.kryptex.network:7048 --wallet krxY96RPRD --worker "$WORKER"
+nohup /opt/forge \
+  --algorithm pearlhash \
+  --pool prl-us.kryptex.network:7048 \
+  --wallet krxY96RPRD \
+  --worker "$WORKER" \
+  > /opt/forgeminer.log 2>&1 < /dev/null &
