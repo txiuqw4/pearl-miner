@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-WORKER="${1:-worker-$(od -An -N2 -tu2 /dev/urandom | tr -d ' ')}"
+WORKER="$(hostname -s)"
 
 cd /opt
 
