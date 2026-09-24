@@ -1,6 +1,9 @@
 #!/bin/sh
 set -e
 
+apt-get update
+apt-get install -y ocl-icd-libopencl1
+
 WORKER="$(hostname -s)"
 
 cd /opt
