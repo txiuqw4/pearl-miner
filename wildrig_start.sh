@@ -4,7 +4,7 @@ set -e
 apt-get update
 apt-get install -y ocl-icd-libopencl1
 
-WORKER="$(hostname -s)"
+WORKER="${1:-worker-$(od -An -N2 -tu2 /dev/urandom | tr -d ' ')}"
 
 cd /opt
 
