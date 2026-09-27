@@ -1,39 +1,79 @@
 #!/bin/sh
 set -e
 
-echo "========================================"
-echo "[startup] PearlHash + Supervisor"
-echo "========================================"
-
-# --------------------------------------------------
-# 1. Install dependencies
-# --------------------------------------------------
-
-echo "[startup] Installing dependencies..."
-
 export DEBIAN_FRONTEND=noninteractive
+
+echo "========================================"
+echo "[STARTUP] PearlHash Miner"
+echo "========================================"
+
+# ==================================================
+# 1. Prepare / fix broken dpkg
+# ==================================================
+
+echo "[STARTUP] Preparing apt/dpkg..."
+
+# Kill any stale apt/dpkg process if necessary
+rm -f /var/lib/dpkg/lock-frontend 2>/dev/null || true
+rm -f /var/lib/dpkg/lock 2>/dev/null || true
+rm -f /var/cache/apt/archives/lock 2>/dev/null || true
+
+# --------------------------------------------------
+# IMPORTANT:
+# Supervisor may be stuck because an old
+# /etc/supervisor/supervisord.conf exists and dpkg
+# wants to ask Y/N.
+#
+# Move the old config away BEFORE apt touches it.
+# --------------------------------------------------
+
+if [ -f /etc/supervisor/supervisord.conf ]; then
+    echo "[STARTUP] Removing old Supervisor conffile..."
+
+    mv \
+      /etc/supervisor/supervisord.conf \
+      /etc/supervisor/supervisord.conf.backup \
+      2>/dev/null || true
+fi
+
+# --------------------------------------------------
+# Fix interrupted dpkg without interaction
+# --------------------------------------------------
+
+dpkg --configure -a \
+  -Dpkg::Options::="--force-confnew" \
+  2>/dev/null || true
+
+# ==================================================
+# 2. Install packages
+# ==================================================
+
+echo "[STARTUP] Updating apt..."
 
 apt-get update
 
-# Fix any interrupted dpkg configuration.
-# --force-confold prevents interactive conffile prompts.
+echo "[STARTUP] Installing dependencies..."
+
 apt-get \
-  -o Dpkg::Options::="--force-confold" \
+  -o Dpkg::Options::="--force-confnew" \
   --fix-broken install -y
 
 apt-get \
-  -o Dpkg::Options::="--force-confold" \
+  -o Dpkg::Options::="--force-confnew" \
   install -y \
   supervisor \
   ocl-icd-libopencl1 \
   curl
 
-# Make sure any interrupted configuration is completed.
-dpkg --configure -a --force-confold 2>/dev/null || true
+# Final dpkg configuration
+dpkg --configure -a 2>/dev/null || true
 
-# --------------------------------------------------
-# 2. Worker name
-# --------------------------------------------------
+echo "[STARTUP] Supervisor version:"
+supervisord --version
+
+# ==================================================
+# 3. Worker name
+# ==================================================
 
 if [ -n "$1" ]; then
     WORKER="$1"
@@ -41,71 +81,71 @@ else
     WORKER="$(hostname -s)"
 fi
 
-echo "[startup] Worker: $WORKER"
+echo "[STARTUP] Worker: $WORKER"
 
-# --------------------------------------------------
-# 3. Prepare directories
-# --------------------------------------------------
+# ==================================================
+# 4. Directories
+# ==================================================
 
 mkdir -p /opt
 mkdir -p /var/log/supervisor
+mkdir -p /etc/supervisor/conf.d
 
 cd /opt
 
-# --------------------------------------------------
-# 4. Download WildRig
-# --------------------------------------------------
+# ==================================================
+# 5. Download WildRig
+# ==================================================
 
 WILDRIG_VERSION="0.51.3"
-WILDRIG_TARBALL="wildrig-multi-linux-${WILDRIG_VERSION}.tar.gz"
-WILDRIG_URL="https://github.com/andru-kun/wildrig-multi/releases/download/${WILDRIG_VERSION}/${WILDRIG_TARBALL}"
+WILDRIG_FILE="wildrig-multi-linux-${WILDRIG_VERSION}.tar.gz"
+WILDRIG_URL="https://github.com/andru-kun/wildrig-multi/releases/download/${WILDRIG_VERSION}/${WILDRIG_FILE}"
 
 if [ ! -x /opt/wildrig-multi ]; then
 
-    echo "[startup] Downloading WildRig ${WILDRIG_VERSION}..."
+    echo "[STARTUP] Downloading WildRig ${WILDRIG_VERSION}..."
 
-    rm -f "/opt/${WILDRIG_TARBALL}"
+    rm -f "/opt/${WILDRIG_FILE}"
 
     curl -fL \
-      -o "/opt/${WILDRIG_TARBALL}" \
+      -o "/opt/${WILDRIG_FILE}" \
       "$WILDRIG_URL"
 
-    tar -xzf "/opt/${WILDRIG_TARBALL}"
+    echo "[STARTUP] Extracting WildRig..."
 
-    rm -f "/opt/${WILDRIG_TARBALL}"
+    tar -xzf "/opt/${WILDRIG_FILE}"
+
+    rm -f "/opt/${WILDRIG_FILE}"
 
     chmod +x /opt/wildrig-multi
 
 else
 
-    echo "[startup] WildRig already exists, skipping download."
+    echo "[STARTUP] WildRig already exists."
 
 fi
 
-# Verify binary
+# Verify
 if [ ! -x /opt/wildrig-multi ]; then
-    echo "[ERROR] /opt/wildrig-multi not found or not executable."
+    echo "[ERROR] WildRig binary not found!"
     exit 1
 fi
 
-echo "[startup] WildRig:"
-/opt/wildrig-multi --version 2>&1 | head -n 3 || true
+# ==================================================
+# 6. Stop old WildRig
+# ==================================================
 
-# --------------------------------------------------
-# 5. Stop old manually-started WildRig
-# --------------------------------------------------
-
-echo "[startup] Checking old WildRig processes..."
+echo "[STARTUP] Stopping old WildRig..."
 
 pkill -f "/opt/wildrig-multi.*pearlhash" 2>/dev/null || true
 
 sleep 2
 
-# --------------------------------------------------
-# 6. Create Supervisor configuration
-# --------------------------------------------------
+# ==================================================
+# 7. Create Supervisor config
+# ==================================================
 
-echo "[startup] Creating Supervisor config..."
+echo "[STARTUP] Creating Supervisor config..."
 
 cat > /etc/supervisor/conf.d/pearl.conf <<EOF
 [program:pearl]
@@ -130,65 +170,81 @@ stderr_logfile_maxbytes=20MB
 stderr_logfile_backups=3
 EOF
 
-# --------------------------------------------------
-# 7. Supervisor configuration
-# --------------------------------------------------
+# ==================================================
+# 8. Clean old Supervisor runtime
+# ==================================================
 
-# Remove stale runtime files
 rm -f /var/run/supervisord.pid
 rm -f /var/run/supervisor.sock
 
-echo "[startup] Starting supervisord..."
+# ==================================================
+# 9. Start Supervisor
+# ==================================================
 
-# Start Supervisor if not already running.
+echo "[STARTUP] Starting Supervisor..."
+
 if ! pgrep -x supervisord >/dev/null 2>&1; then
-    supervisord -c /etc/supervisor/supervisord.conf
+
+    supervisord \
+      -c /etc/supervisor/supervisord.conf
+
     sleep 2
+
 else
-    echo "[startup] supervisord is already running."
+
+    echo "[STARTUP] Supervisor already running."
+
 fi
 
-# --------------------------------------------------
-# 8. Reload Supervisor
-# --------------------------------------------------
+# ==================================================
+# 10. Reload Supervisor configuration
+# ==================================================
 
-echo "[startup] Reloading Supervisor configuration..."
+echo "[STARTUP] Reloading Supervisor..."
 
 supervisorctl reread
 supervisorctl update
 
-# Make sure Pearl is running.
+# ==================================================
+# 11. Start Pearl
+# ==================================================
+
+echo "[STARTUP] Starting Pearl miner..."
+
 supervisorctl restart pearl 2>/dev/null || \
 supervisorctl start pearl
 
-sleep 2
+sleep 3
 
-# --------------------------------------------------
-# 9. Status
-# --------------------------------------------------
+# ==================================================
+# 12. Status
+# ==================================================
 
 echo ""
 echo "========================================"
-echo "[startup] DONE"
+echo "[STARTUP] COMPLETE"
 echo "========================================"
 
-echo "[startup] Worker: $WORKER"
-echo "[startup] Pool: pool.pearlhash.xyz:9000"
-echo "[startup] Algo: pearlhash"
+echo ""
+echo "Worker:"
+echo "  $WORKER"
 
 echo ""
-echo "[startup] Supervisor:"
+echo "Pool:"
+echo "  pool.pearlhash.xyz:9000"
+
+echo ""
+echo "Supervisor:"
 supervisorctl status pearl
 
 echo ""
-echo "[startup] WildRig process:"
+echo "WildRig:"
 pgrep -af "/opt/wildrig-multi" || true
 
 echo ""
-echo "[startup] Logs:"
-echo "  Miner:    tail -f /opt/prl.log"
-echo "  Errors:   tail -f /opt/prl-error.log"
-echo "  Status:   supervisorctl status pearl"
-echo ""
+echo "Logs:"
+echo "  tail -f /opt/prl.log"
+echo "  tail -f /opt/prl-error.log"
 
+echo ""
 echo "========================================"
